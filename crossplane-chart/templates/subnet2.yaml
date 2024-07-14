@@ -1,0 +1,17 @@
+apiVersion: ec2.aws.crossplane.io/v1beta1
+kind: Subnet
+metadata:
+  name: test-env-subnet2
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "3"
+spec:
+  forProvider:
+    region: us-east-1
+    availabilityZone: us-east-1c
+    cidrBlock: 10.0.2.0/24
+    vpcIdRef:
+      name: test-env
+    mapPublicIPOnLaunch: false
+  providerConfigRef:
+    name: localstack

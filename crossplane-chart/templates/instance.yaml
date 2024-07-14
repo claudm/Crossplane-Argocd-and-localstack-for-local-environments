@@ -1,1 +1,21 @@
-
+apiVersion: ec2.aws.crossplane.io/v1alpha1
+kind: Instance
+metadata:
+  name: test-env-instance1
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "6"
+spec:
+  forProvider:
+    region: us-east-1
+    imageId: ami-0dc2d3e4c0f9ebd18
+    blockDeviceMappings:
+      - deviceName: /dev/sdx
+        ebs:
+          volumeSize: 100
+    securityGroupRefs:
+      - name: test-env-instances-sg
+    subnetIdRef:
+      name: test-env-subnet1
+  providerConfigRef:
+    name: localstack
