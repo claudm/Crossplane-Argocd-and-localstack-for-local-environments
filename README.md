@@ -22,10 +22,7 @@ Como o rancher é uma das ferramentas mais amplamente utilizadas para clusters l
 Usaremos o Argo CD para gerenciar todos os outros componentes de software de agora em diante, mas antes disso, precisamos instalá-lo. A documentação é excelente, uma  [instalação](https://argo-cd.readthedocs.io/en/stable/getting_started/#1-install-argo-cd) vanilla é bem simples e é mais do que suficiente para nosso projeto atual. Apenas certifique-se de pular a versão principal, precisamos da UI.
 
 ```
-    kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-	helm install argocd argo/argo-cd -n argocd --create-namespace \
+helm install argocd argo/argo-cd -n argocd --create-namespace \
   --set server.insecure=true \
   --set controller.insecure=true \
   --set repoServer.insecure=true \
