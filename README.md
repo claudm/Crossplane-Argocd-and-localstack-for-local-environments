@@ -38,31 +38,7 @@ helm install argocd argo/argo-cd -n argocd --create-namespace \
   kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ```
-✅ **Ah, o repositório!**
 
-Quase esquecemos de configurar nosso repositório git no Argo CD. Supondo que você esteja utilizando um repositório privado para seus testes, você pode seguir as instruções na UI conforme descrito  [aqui](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/). No entanto, para este artigo, usarei meu repositório público:
-
-```
-SSH_PRIVATE_KEY=$(cat ~/.ssh/id_rsa)
-
-# Cria o arquivo do manifesto usando cat e EOF
-cat <<EOF > k8s-manifest.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: repo-demo
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: repo-creds
-stringData:
-  type: git
-  url: ssh://git@github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments.git
-  sshPrivateKey: |
-    $SSH_PRIVATE_KEY
-EOF
-
-
-```
 
 Depois que seu repositório estiver definido, você precisará configurar um aplicativo para gerenciar todos os outros aplicativos que serão descobertos no repositório (App of Apps)..
 
