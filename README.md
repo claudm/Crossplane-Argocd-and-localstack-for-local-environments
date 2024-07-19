@@ -30,6 +30,13 @@ Usaremos o Argo CD para gerenciar todos os outros componentes de software de ago
   --set controller.insecure=true \
   --set repoServer.insecure=true \
   --set dex.insecure=true
+  #pegar a senha do admin
+  
+  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+ 
+  #acessar o argocd no navegador
+  kubectl port-forward svc/argocd-server -n argocd 8080:443
+
 ```
 ✅ **Ah, o repositório!**
 
@@ -110,7 +117,7 @@ No repositório público, você pode encontrar alguns Applications, que são org
 
 **Localstack e Crossplane**
 
-Bem simples aqui, estamos apenas implantando o gráfico oficial do leme para ambas as ferramentas
+Bem simples aqui, estamos apenas implantando o chart oficial do helm para ambas as ferramentas
 
 ```
 	cat <<EOF | kubectl apply -f -
@@ -186,7 +193,7 @@ EOF
 
 **provedores de crossplane**
 
-Aqui está algo um pouco diferente: estamos implantando [Crossplane Providers](https://docs.crossplane.io/latest/concepts/providers/) a partir de manifestos colocados em um caminho específico. Nosso foco é brincar com Crossplane e AWS (por meio do Localstack), então, por enquanto, estamos instalando apenas o  A[AWS provider](https://marketplace.upbound.io/providers/upbound/provider-aws/v0.46.0). No entanto, você pode adicionar qualquer outra coisa que precisar mais tarde.
+Aqui está algo um pouco diferente: estamos implantando [Crossplane Providers](https://docs.crossplane.io/latest/concepts/providers/) a partir de manifestos colocados em um caminho específico. Nosso foco é brincar com Crossplane e AWS (por meio do Localstack), então, por enquanto, estamos instalando apenas o  [AWS provider](https://marketplace.upbound.io/providers/upbound/provider-aws/v0.46.0). No entanto, você pode adicionar qualquer outra coisa que precisar mais tarde.
 
 Tenha em mente que a implantação do provedor pode demorar um pouco, dependendo da sua configuração local, ele implantará muitos CRDs.
 
@@ -228,7 +235,7 @@ EOF
 
 ℹ️ Observe que os provedores Crossplane são instalados em um segundo estágio após o aplicativo ***crossplane*** estar instalado e funcionando.
 
-## **O glue**
+## **a peça chave**
 
 Agora, temos o Localstack, o Crossplane e seu provedor AWS em execução. O próximo passo é unir os dois, nos dando a experiência de interagir diretamente com a AWS.
 
@@ -266,7 +273,7 @@ spec:
 EOF
 ```
 
-And a [ProviderConfig](https://docs.crossplane.io/latest/concepts/providers/#configure-a-provider)
+e a configuração do  [ProviderConfig](https://docs.crossplane.io/latest/concepts/providers/#configure-a-provider)
 
 ```
 cat <<EOF | kubectl apply -f -
@@ -294,20 +301,100 @@ spec:
 EOF
 ```
 
-Como você pode ver aqui, ele pega credenciais do Segredo definido anteriormente e, na seção de endpoint, aponta para nosso serviço Localstack.
+Como você pode ver até aqui, nós pegamos credenciais do Secret definido anteriormente e na seção do endpoint apontamos para o nosso serviço Localstack(Aws local).
 
 ## **Colocando tudo em movimento!**
 
-A última parte móvel aqui é o nosso “hello world”, gerenciado pelo aplicativo chamado  **test-env**.
-Semelhante ao  ***crossplane-providers***,  este aplicativo estará procurando por manifestos Crossplane em um caminho específico, neste caso, **/test-env**
+A última parte esta aqui é o nosso “hello world”, gerenciado pelo aplicativo chamado  **test-env**.
+Semelhante ao  ***crossplane-providers***,  este aplicativo estará procurando por manifestos Crossplane no caminho específico, neste caso, **/test-env** em https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments/tree/main/test-env
+
 
 Aqui, você encontrará uma configuração muito simples da AWS: uma VPC, três sub-redes, um grupo de segurança e uma instância EC2
 
 Agora é hora de sincronizar o aplicativo ***test-env***  
 
-✨ Neste ponto, tudo se encaixa e podemos ver o verdadeiro potencial desta configuração.. ✨
+```
+cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: test-env
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments
+    targetRevision: HEAD
+    path: test-env
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
 
-Podemos usar a Argo CD UI para visualizar mais facilmente todos os recursos implantados pelo Crossplane. Com o controle de versão em vigor, temos a flexibilidade de reverter as alterações, se necessário, junto com todos os recursos interessantes do GitOps.
+
+```
+
+
+
+```
+cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: test
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments
+    targetRevision: HEAD
+    path: test
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+
+
+```
+
+```
+cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-chart
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments'
+    targetRevision: HEAD
+    path: crossplane-chart
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+```
+
+
+✨ Neste ponto, tudo se encaixa e podemos ver o verdadeiro potencial desta infraestrutura.. ✨
+
+Podemos usar a interface do ArgoCD  para visualizar mais facilmente todos os recursos implantados pelo Crossplane. Com o controle de versão em vigor, temos a flexibilidade de reverter as alterações, se necessário, junto com todos os recursos interessantes do GitOps.
 
 ![](https://cdn-images-1.medium.com/max/2000/1*cvohOMceyYPA9cJVXkrKaA.png)
 
