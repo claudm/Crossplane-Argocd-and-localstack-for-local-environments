@@ -27,11 +27,14 @@ helm install argocd argo/argo-cd -n argocd --create-namespace \
   --set controller.insecure=true \
   --set repoServer.insecure=true \
   --set dex.insecure=true
+```
+
   #pegar a senha do admin
-  
+```
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
- 
+``` 
   #acessar o argocd no navegador
+```
   kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ```
