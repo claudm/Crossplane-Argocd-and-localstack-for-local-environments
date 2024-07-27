@@ -19,59 +19,68 @@ Como o rancher é uma das ferramentas mais amplamente utilizadas para clusters l
 
 ✅ **Argo CD**
 
-Usaremos o Argo CD para gerenciar todos os outros componentes de software de agora em diante, mas antes disso, precisamos instalá-lo. A documentação é excelente, uma  [instalação](https://argo-cd.readthedocs.io/en/stable/getting_started/#1-install-argo-cd) vanilla é bem simples e é mais do que suficiente para nosso projeto atual. Apenas certifique-se de pular a versão principal, precisamos da UI.
+Usaremos o Argo CD para gerenciar todos os outros componentes de software de agora em diante, mas antes disso, precisamos instalá-lo. usaremos o helm para isso 
 
+caso não possua o chocalatey instalado use o comando powershell abaixo
+<div style="background-color:#f9f9f9; border:1px solid #ccc; padding:10px;">
+
+Set-ExecutionPolicy AllSigned
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+</div>
+ <br>
+
+✅ logo após instale o helm 
 ```
-helm install argocd argo/argo-cd -n argocd --create-namespace \
+choco install kubernetes-helm
+```
+instale o argocd com esssas opçoes
+```bash
+helm repo add argocd https://argoproj.github.io/argo-helm
+helm install argocd argocd/argo-cd -n argocd --create-namespace \
   --set server.insecure=true \
   --set controller.insecure=true \
   --set repoServer.insecure=true \
   --set dex.insecure=true
-```
-
-  ##pegar a senha do admin
-```
+  #pegar a senha do admin
+  
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-``` 
-  ##acessar o argocd no navegador
-```
+ 
+  #acessar o argocd no navegador
   kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ```
+✅ **Ah, o repositório!**
 
-
-Depois que seu repositório estiver definido, você precisará configurar um aplicativo para gerenciar todos os outros aplicativos que serão descobertos no repositório (App of Apps)..
+Quase esquecemos de configurar nosso repositório git no Argo CD. Supondo que você esteja utilizando um repositório privado para seus testes, você pode seguir as instruções na UI conforme descrito  [aqui](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/). No entanto, para este artigo, usarei meu repositório público:
 
 ```
-	cat <<EOF | kubectl apply -f -
-    apiVersion: argoproj.io/v1alpha1
-    kind: Application
-    metadata:
-      name: appofapps
-      namespace: argocd
-      finalizers:
-        - resources-finalizer.argocd.argoproj.io
-      labels:
-        name: appofapps
-    spec:
-      project: default
-      source:
-        repoURL: https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments.git
-        targetRevision: HEAD
-        path: .
-    
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: argocd
-      syncPolicy:
-        automated:
-          prune: true 
-          selfHeal: true 
-          allowEmpty: true
-        syncOptions:
-        - CreateNamespace=true
-      revisionHistoryLimit: 10
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_crossplane_argocd -N "" <<< y >/dev/null 2>&1
+```
+
+✅ adicione a chave ao github conforme esse video [aqui](https://www.youtube.com/watch?v=iVJesFfzDGs). 
+
+✅ execute o script abaixo para configurar seu repositorio
+
+```
+
+export SSH_PRIVATE_KEY=$(cat ~/.ssh/id_rsa_crossplane_argocd)
+
+#Crie o arquivo do manifesto usando cat e EOF
+cat <<EOF > k8s-manifest.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-demo
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  type: git
+  url: ssh://git@github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments.git
+  sshPrivateKey: |
+    $SSH_PRIVATE_KEY
 EOF
+
 
 ```
 
@@ -96,7 +105,7 @@ No repositório público, você pode encontrar alguns Applications, que são org
 Bem simples aqui, estamos apenas implantando o chart oficial do helm para ambas as ferramentas
 
 ```
-	cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -f -
     apiVersion: argoproj.io/v1alpha1
     kind: Application
     metadata:
@@ -213,16 +222,16 @@ EOF
 
 ## **a peça chave**
 
-Agora, temos o Localstack, o Crossplane e seu provedor AWS em execução. O próximo passo é unir os dois, nos dando a experiência de interagir diretamente com a AWS.
+Agora, vamos criar  o Localstack, para o Crossplane do seu provedor AWS ser executado. O próximo passo é unir os dois, nos dando a experiência de interagir diretamente com a AWS.
 
 Temos este secrets simples que contém um conjunto fictício de credenciais
 
 ```
-	cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -f -
     apiVersion: v1
     kind: Secret
     metadata:
-      name: aws-secret
+      name: localstack-aws-secret
       namespace: crossplane-system
       annotations:
         argocd.argoproj.io/hook: Sync
@@ -231,21 +240,6 @@ Temos este secrets simples que contém um conjunto fictício de credenciais
     type: Opaque
     data:
       creds: W2RlZmF1bHRdCmF3c19hY2Nlc3Nfa2V5X2lkID0gdGVzdAphd3Nfc2VjcmV0X2FjY2Vzc19rZXkgPSB0ZXN0Cg==
-EOF
-```
-```
-cat <<EOF | kubectl apply -f -
-apiVersion: aws.crossplane.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: crossplane-system
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: aws-secret
-      key: creds
 EOF
 ```
 
@@ -365,6 +359,42 @@ spec:
       prune: true
       selfHeal: true
 EOF
+```
+
+
+Depois que seu repositório estiver definido, você precisará configurar um aplicativo para gerenciar todos os outros aplicativos que serão descobertos no repositório (App of Apps)..
+
+```
+cat <<EOF | kubectl apply -f -
+    apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: appofapps
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      labels:
+        name: appofapps
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/claudm/Crossplane-Argocd-and-localstack-for-local-environments.git
+        targetRevision: HEAD
+        path: .
+    
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true 
+          selfHeal: true 
+          allowEmpty: true
+        syncOptions:
+        - CreateNamespace=true
+      revisionHistoryLimit: 10
+EOF
+
 ```
 
 
